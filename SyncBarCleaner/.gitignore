@@ -1,0 +1,39 @@
+# Visual Studio
+
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build output
+
+bin/
+obj/
+Debug/
+Release/
+x64/
+x86/
+
+# Rider / JetBrains
+
+.idea/
+
+# VS Code
+
+.vscode/
+
+# OS junk
+
+.DS_Store
+Thumbs.db
+
+# Logs
+
+*.log
+
+# Local/private files
+
+*.local
+*.bak
+*.tmp
