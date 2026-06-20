@@ -1,0 +1,12 @@
+{
+  "Author": "ZanaRemina",
+  "Name": "SyncBarCleaner",
+  "Punchline": "Visually hides unavailable synced actions on cross hotbars.",
+  "Description": "Private plugin to make level-synced cross hotbars easier to read.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "hotbar",
+    "levelsync",
+    "xhb"
+  ]
+}
