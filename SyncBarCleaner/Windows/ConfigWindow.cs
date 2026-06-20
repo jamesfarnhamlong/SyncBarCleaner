@@ -9,25 +9,23 @@ public class ConfigWindow : Window, IDisposable
 {
     private readonly Configuration configuration;
 
-    // We give this window a constant ID using ###.
-    // This allows for labels to be dynamic, like "{FPS Counter}fps###XYZ counter window",
-    // and the window ID will always be "###XYZ counter window" for ImGui
-    public ConfigWindow(Plugin plugin) : base("A Wonderful Configuration Window###With a constant ID")
+    public ConfigWindow(Plugin plugin) : base("SyncBarCleaner Settings###SyncBarCleanerConfig")
     {
         Flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
                 ImGuiWindowFlags.NoScrollWithMouse;
 
-        Size = new Vector2(232, 90);
-        SizeCondition = ImGuiCond.Always;
+        Size = new Vector2(420, 220);
+        SizeCondition = ImGuiCond.FirstUseEver;
 
         configuration = plugin.Configuration;
     }
 
-    public void Dispose() { }
+    public void Dispose()
+    {
+    }
 
     public override void PreDraw()
     {
-        // Flags must be added or removed before Draw() is being called, or they won't apply
         if (configuration.IsConfigWindowMovable)
         {
             Flags &= ~ImGuiWindowFlags.NoMove;
@@ -40,20 +38,45 @@ public class ConfigWindow : Window, IDisposable
 
     public override void Draw()
     {
-        // Can't ref a property, so use a local copy
-        var configValue = configuration.SomePropertyToBeSavedAndWithADefault;
-        if (ImGui.Checkbox("Random Config Bool", ref configValue))
+        ImGui.TextWrapped("SyncBarCleaner visually hides level-synced actions that are not currently available.");
+        ImGui.Spacing();
+
+        var autoEnable = configuration.AutoEnableOnLoad;
+        if (ImGui.Checkbox("Enable automatically on plugin load", ref autoEnable))
         {
-            configuration.SomePropertyToBeSavedAndWithADefault = configValue;
-            // Can save immediately on change if you don't want to provide a "Save and Close" button
+            configuration.AutoEnableOnLoad = autoEnable;
             configuration.Save();
         }
 
+        ImGui.TextWrapped("When enabled, SyncBarCleaner starts in real level-sync mode automatically.");
+
+        ImGui.Spacing();
+
+        var expanded = configuration.EnableExpandedCrossHotbars;
+        if (ImGui.Checkbox("Enable expanded cross hotbar support", ref expanded))
+        {
+            configuration.EnableExpandedCrossHotbars = expanded;
+            configuration.Save();
+        }
+
+        ImGui.TextWrapped("Controls hiding on expanded/WXHB cross hotbars. Turn this off if an unusual controller setup behaves incorrectly.");
+
+        ImGui.Spacing();
+
         var movable = configuration.IsConfigWindowMovable;
-        if (ImGui.Checkbox("Movable Config Window", ref movable))
+        if (ImGui.Checkbox("Movable settings window", ref movable))
         {
             configuration.IsConfigWindowMovable = movable;
             configuration.Save();
         }
+
+        ImGui.Separator();
+
+        ImGui.TextWrapped("Commands:");
+        ImGui.BulletText("/syncbar status");
+        ImGui.BulletText("/syncbar auto");
+        ImGui.BulletText("/syncbar auto <level>");
+        ImGui.BulletText("/syncbar auto off");
+        ImGui.BulletText("/syncbar restore");
     }
 }

@@ -27,7 +27,7 @@ namespace SyncBarCleaner;
 ///   inner node 2, deep node 8  = small MP/value text
 ///
 /// Supported visual addons:
-///   _ActionCross        = main cross hotbar, XHB1
+///   _ActionCross        = current visible cross hotbar set, detected from the SET label
 ///   _ActionDoubleCrossL = expanded/WXHB left side, XHB2 slots 0-7
 ///   _ActionDoubleCrossR = expanded/WXHB right side, XHB2 slots 8-15
 /// </summary>
@@ -44,6 +44,25 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
 
     private const string CommandName = "/syncbar";
+
+    // RaptureHotbarModule cross hotbar IDs:
+    //   SET 1 = 10, SET 2 = 11, ... SET 8 = 17.
+    private const uint FirstCrossHotbarId = 10;
+    private const uint ExpandedCrossHotbarId = 11; // XHB2.
+    private const uint FallbackCrossHotbarId = FirstCrossHotbarId;
+
+    private const int MinCrossHotbarSet = 1;
+    private const int MaxCrossHotbarSet = 8;
+
+    // The SET number in _ActionCross uses the FFXIV icon font.
+    // Observed sequence: U+E090 = SET 1, U+E091 = SET 2, ..., U+E097 = SET 8.
+    private const int CrossHotbarSetGlyphStart = 0xE090;
+
+    // Stable action-button leaf nodes.
+    // Do not hide the whole button/component: that caused black-box/cache artefacts.
+    private const uint ButtonInnerNodeId = 2;
+    private const uint ActionIconDeepNodeId = 20;
+    private const uint ValueTextDeepNodeId = 8;
 
     // Main mode state.
     // autoHideTestLevel == 0 means "real level sync only".
@@ -68,7 +87,6 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         ConfigWindow = new ConfigWindow(this);
-
         WindowSystem.AddWindow(ConfigWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -82,11 +100,12 @@ public sealed class Plugin : IDalamudPlugin
 
         // Auto-enable real level-sync mode when the plugin loads.
         // This behaves like typing /syncbar auto, not /syncbar auto <level>.
-        autoHideEnabled = true;
+        autoHideEnabled = Configuration.AutoEnableOnLoad;
         autoHideTestLevel = 0;
 
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUi;
+        PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUi;
 
         Log.Information($"=== {PluginInterface.Manifest.Name} loaded ===");
     }
@@ -95,6 +114,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
+        PluginInterface.UiBuilder.OpenMainUi -= ToggleConfigUi;
 
         AddonLifecycle.UnregisterListener(OnAnyAddonPostUpdate);
 
@@ -106,7 +126,6 @@ public sealed class Plugin : IDalamudPlugin
         QueueRestore();
 
         WindowSystem.RemoveAllWindows();
-
         ConfigWindow.Dispose();
 
         CommandManager.RemoveHandler(CommandName);
@@ -136,20 +155,22 @@ public sealed class Plugin : IDalamudPlugin
         if (!autoHideEnabled)
             return;
 
-        // Then apply active auto-hide logic to whichever hotbar addon updated.
         if (args.AddonName == "_ActionCross")
         {
-            ApplyAutoHideMainCross(args);
+            ApplyAutoHideActionCross(args);
             return;
         }
 
-        if (args.AddonName == "_ActionDoubleCrossL")
+        // Expanded/WXHB display of XHB2:
+        //   _ActionDoubleCrossL = XHB2 slots 0-7
+        //   _ActionDoubleCrossR = XHB2 slots 8-15
+        if (Configuration.EnableExpandedCrossHotbars && args.AddonName == "_ActionDoubleCrossL")
         {
             ApplyAutoHideDoubleCross(args, 0);
             return;
         }
 
-        if (args.AddonName == "_ActionDoubleCrossR")
+        if (Configuration.EnableExpandedCrossHotbars && args.AddonName == "_ActionDoubleCrossR")
         {
             ApplyAutoHideDoubleCross(args, 8);
             return;
@@ -199,13 +220,12 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        autoHideEnabled = true;
+        // Auto-enable real level-sync mode when the plugin loads, if enabled in settings.
+        autoHideEnabled = Configuration.AutoEnableOnLoad;
         autoHideTestLevel = 0;
 
         if (parts.Length >= 2 && int.TryParse(parts[1], out var fakeLevel))
-        {
             autoHideTestLevel = Math.Clamp(fakeLevel, 1, 100);
-        }
 
         ChatGui.Print(
             autoHideTestLevel > 0
@@ -255,7 +275,7 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    private unsafe void ApplyAutoHideMainCross(AddonArgs args)
+    private unsafe void ApplyAutoHideActionCross(AddonArgs args)
     {
         var hotbarModule = RaptureHotbarModule.Instance();
 
@@ -271,7 +291,10 @@ public sealed class Plugin : IDalamudPlugin
         var shouldApply = PlayerState.IsLevelSynced || useTestLevel;
         var effectiveLevel = useTestLevel ? autoHideTestLevel : PlayerState.EffectiveLevel;
 
-        const uint hotbarId = 10; // XHB1.
+        // _ActionCross can display different sets depending on controller input mode.
+        // Read the visible SET label so we compare each visual slot with the correct
+        // underlying cross hotbar data.
+        var hotbarId = GetVisibleActionCrossHotbarId(args);
 
         for (uint slotId = 0; slotId < 16; slotId++)
         {
@@ -304,8 +327,6 @@ public sealed class Plugin : IDalamudPlugin
         var shouldApply = PlayerState.IsLevelSynced || useTestLevel;
         var effectiveLevel = useTestLevel ? autoHideTestLevel : PlayerState.EffectiveLevel;
 
-        const uint hotbarId = 11; // XHB2.
-
         for (uint visibleSlotId = 0; visibleSlotId < 8; visibleSlotId++)
         {
             var slotId = slotOffset + visibleSlotId;
@@ -313,7 +334,7 @@ public sealed class Plugin : IDalamudPlugin
             var shouldHide = shouldApply && ShouldHideHotbarSlot(
                 hotbarModule,
                 actionSheet,
-                hotbarId,
+                ExpandedCrossHotbarId,
                 slotId,
                 effectiveLevel
             );
@@ -321,6 +342,68 @@ public sealed class Plugin : IDalamudPlugin
             GetDoubleCrossVisualSlot(visibleSlotId, out var parentNodeId, out var childNodeId);
             SetButtonHidden(args, parentNodeId, childNodeId, shouldHide);
         }
+    }
+
+    private unsafe uint GetVisibleActionCrossHotbarId(AddonArgs args)
+    {
+        if (args.Addon.IsNull)
+            return FallbackCrossHotbarId;
+
+        var addon = (AtkUnitBase*)args.Addon.Address;
+
+        if (addon == null)
+            return FallbackCrossHotbarId;
+
+        var nodeList = addon->UldManager.NodeList;
+        var count = addon->UldManager.NodeListCount;
+
+        if (nodeList == null || count == 0)
+            return FallbackCrossHotbarId;
+
+        for (var i = 0; i < count; i++)
+        {
+            var node = nodeList[i];
+
+            if (node == null)
+                continue;
+
+            // From the earlier text dump:
+            //   root[025] id=19 text='Set'
+            //   root[024] id=20 text='<FFXIV set-number glyph>'
+            if (node->NodeId != 20)
+                continue;
+
+            if (!node->Type.ToString().Equals("Text", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var textNode = (AtkTextNode*)node;
+            var setNumber = ParseCrossHotbarSetNumber(textNode->NodeText.ToString());
+
+            if (setNumber is >= MinCrossHotbarSet and <= MaxCrossHotbarSet)
+                return FirstCrossHotbarId + (uint)(setNumber - 1);
+        }
+
+        return FallbackCrossHotbarId;
+    }
+
+    private static int ParseCrossHotbarSetNumber(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return 0;
+
+        foreach (var ch in text)
+        {
+            // Normal digits, just in case some UI/font state exposes them directly.
+            if (ch is >= '1' and <= '8')
+                return ch - '0';
+
+            var code = (int)ch;
+
+            if (code is >= CrossHotbarSetGlyphStart and < CrossHotbarSetGlyphStart + MaxCrossHotbarSet)
+                return code - CrossHotbarSetGlyphStart + 1;
+        }
+
+        return 0;
     }
 
     private unsafe bool ShouldHideHotbarSlot(
@@ -372,40 +455,26 @@ public sealed class Plugin : IDalamudPlugin
     {
         var alpha = hidden ? (byte)0 : (byte)255;
 
-        // These are the only native UI nodes touched by the stable path.
-        // Do not hide the full button component: that caused black-box/cache artefacts.
-        ApplyAlphaToDeepLeafNode(args, parentNodeId, childNodeId, 2, 20, alpha); // skill icon image
-        ApplyAlphaToDeepLeafNode(args, parentNodeId, childNodeId, 2, 8, alpha);  // small MP/value text
+        ApplyAlphaToDeepLeafNode(args, parentNodeId, childNodeId, ButtonInnerNodeId, ActionIconDeepNodeId, alpha);
+        ApplyAlphaToDeepLeafNode(args, parentNodeId, childNodeId, ButtonInnerNodeId, ValueTextDeepNodeId, alpha);
     }
 
     private unsafe void RestoreButtonIconAndText(AddonArgs args, uint parentNodeId, uint childNodeId)
     {
-        ApplyAlphaToDeepLeafNode(args, parentNodeId, childNodeId, 2, 20, 255);
-        ApplyAlphaToDeepLeafNode(args, parentNodeId, childNodeId, 2, 8, 255);
+        ApplyAlphaToDeepLeafNode(args, parentNodeId, childNodeId, ButtonInnerNodeId, ActionIconDeepNodeId, 255);
+        ApplyAlphaToDeepLeafNode(args, parentNodeId, childNodeId, ButtonInnerNodeId, ValueTextDeepNodeId, 255);
     }
 
     private void GetMainCrossVisualSlot(uint slotId, out uint parentNodeId, out uint childNodeId)
     {
         // _ActionCross parent block mapping:
-        //   33 = XHB1 S00-S03
-        //   34 = XHB1 S04-S07
-        //   35 = XHB1 S08-S11
-        //   36 = XHB1 S12-S15
+        //   33 = S00-S03
+        //   34 = S04-S07
+        //   35 = S08-S11
+        //   36 = S12-S15
         parentNodeId = 33 + (slotId / 4);
 
-        // Child mapping inside each parent:
-        //   +0 = left   = child 2
-        //   +1 = top    = child 3
-        //   +2 = right  = child 4
-        //   +3 = bottom = child 5
-        childNodeId = (slotId % 4) switch
-        {
-            0 => 2, // left
-            1 => 3, // top
-            2 => 4, // right
-            3 => 5, // bottom
-            _ => 2,
-        };
+        childNodeId = GetCrossButtonChildNodeId(slotId);
     }
 
     private void GetDoubleCrossVisualSlot(uint visibleSlotId, out uint parentNodeId, out uint childNodeId)
@@ -415,13 +484,22 @@ public sealed class Plugin : IDalamudPlugin
         //   6 = visible slots 4-7
         parentNodeId = 5 + (visibleSlotId / 4);
 
-        // Same child mapping as _ActionCross.
-        childNodeId = (visibleSlotId % 4) switch
+        childNodeId = GetCrossButtonChildNodeId(visibleSlotId);
+    }
+
+    private static uint GetCrossButtonChildNodeId(uint slotId)
+    {
+        // Button mapping inside each parent block:
+        //   +0 = left   = child 2
+        //   +1 = top    = child 3
+        //   +2 = right  = child 4
+        //   +3 = bottom = child 5
+        return (slotId % 4) switch
         {
-            0 => 2, // left
-            1 => 3, // top
-            2 => 4, // right
-            3 => 5, // bottom
+            0 => 2,
+            1 => 3,
+            2 => 4,
+            3 => 5,
             _ => 2,
         };
     }
