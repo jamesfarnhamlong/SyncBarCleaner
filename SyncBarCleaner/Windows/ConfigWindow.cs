@@ -7,17 +7,26 @@ namespace SyncBarCleaner.Windows;
 
 public class ConfigWindow : Window, IDisposable
 {
+    private readonly Plugin plugin;
     private readonly Configuration configuration;
 
-    public ConfigWindow(Plugin plugin) : base("SyncBarCleaner Settings###SyncBarCleanerConfig")
+    public ConfigWindow(Plugin plugin) : base("SyncBarCleaner Settings###SyncBarCleanerConfigV2")
     {
-        Flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
-                ImGuiWindowFlags.NoScrollWithMouse;
+        this.plugin = plugin;
+        configuration = plugin.Configuration;
 
-        Size = new Vector2(420, 220);
+        // Keep the window simple: collapsible disabled, but resizing and scrolling allowed.
+        Flags = ImGuiWindowFlags.NoCollapse;
+
+        // New window ID above resets the saved tiny size from the old config window.
+        Size = new Vector2(520, 420);
         SizeCondition = ImGuiCond.FirstUseEver;
 
-        configuration = plugin.Configuration;
+        SizeConstraints = new WindowSizeConstraints
+        {
+            MinimumSize = new Vector2(420, 260),
+            MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
+        };
     }
 
     public void Dispose()
@@ -48,35 +57,63 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
-        ImGui.TextWrapped("When enabled, SyncBarCleaner starts in real level-sync mode automatically.");
-
         ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextWrapped("Apply to:");
+
+        var main = configuration.EnableMainCrossHotbar;
+        if (ImGui.Checkbox("Main cross hotbar", ref main))
+        {
+            configuration.EnableMainCrossHotbar = main;
+            configuration.Save();
+        }
 
         var expanded = configuration.EnableExpandedCrossHotbars;
-        if (ImGui.Checkbox("Enable expanded cross hotbar support", ref expanded))
+        if (ImGui.Checkbox("Expanded/WXHB cross hotbars", ref expanded))
         {
             configuration.EnableExpandedCrossHotbars = expanded;
             configuration.Save();
         }
 
-        ImGui.TextWrapped("Controls hiding on expanded/WXHB cross hotbars. Turn this off if an unusual controller setup behaves incorrectly.");
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextWrapped("Testing:");
+
+        var testMode = configuration.EnableTestMode;
+        if (ImGui.Checkbox("Enable fake level test", ref testMode))
+        {
+            configuration.EnableTestMode = testMode;
+            configuration.Save();
+        }
+
+        var testLevel = configuration.TestEffectiveLevel;
+        ImGui.SetNextItemWidth(120);
+        if (ImGui.InputInt("Test effective level", ref testLevel))
+        {
+            configuration.TestEffectiveLevel = Math.Clamp(testLevel, 1, 100);
+            configuration.Save();
+        }
+
+        ImGui.TextWrapped("When fake level test is enabled, the plugin behaves as if your effective level is the value above.");
 
         ImGui.Spacing();
+        ImGui.Separator();
+
+        if (ImGui.Button("Restore hidden icons now"))
+        {
+            plugin.RestoreFromConfigWindow();
+        }
+
+        ImGui.SameLine();
 
         var movable = configuration.IsConfigWindowMovable;
-        if (ImGui.Checkbox("Movable settings window", ref movable))
+        if (ImGui.Checkbox("Movable window", ref movable))
         {
             configuration.IsConfigWindowMovable = movable;
             configuration.Save();
         }
 
-        ImGui.Separator();
-
-        ImGui.TextWrapped("Commands:");
-        ImGui.BulletText("/syncbar status");
-        ImGui.BulletText("/syncbar auto");
-        ImGui.BulletText("/syncbar auto <level>");
-        ImGui.BulletText("/syncbar auto off");
-        ImGui.BulletText("/syncbar restore");
+        ImGui.Spacing();
+        ImGui.TextWrapped("Commands: /syncbar status, /syncbar auto, /syncbar auto <level>, /syncbar auto off, /syncbar restore");
     }
 }

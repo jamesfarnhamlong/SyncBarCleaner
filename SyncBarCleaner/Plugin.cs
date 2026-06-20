@@ -155,7 +155,7 @@ public sealed class Plugin : IDalamudPlugin
         if (!autoHideEnabled)
             return;
 
-        if (args.AddonName == "_ActionCross")
+        if (Configuration.EnableMainCrossHotbar && args.AddonName == "_ActionCross")
         {
             ApplyAutoHideActionCross(args);
             return;
@@ -239,15 +239,37 @@ public sealed class Plugin : IDalamudPlugin
         var mode = !autoHideEnabled
             ? "OFF"
             : autoHideTestLevel > 0
-                ? $"ON, test effective level {autoHideTestLevel}"
-                : "ON, real level sync";
+                ? $"ON, command test effective level {autoHideTestLevel}"
+                : Configuration.EnableTestMode
+                    ? $"ON, settings test effective level {Math.Clamp(Configuration.TestEffectiveLevel, 1, 100)}"
+                    : "ON, real level sync";
 
         ChatGui.Print(
             $"[SyncBarCleaner] Auto-hide={mode}. " +
+            $"MainXHB={Configuration.EnableMainCrossHotbar}, " +
+            $"ExpandedXHB={Configuration.EnableExpandedCrossHotbars}, " +
             $"Synced={PlayerState.IsLevelSynced}, " +
             $"Level={PlayerState.Level}, " +
             $"Effective={PlayerState.EffectiveLevel}"
         );
+    }
+
+    private bool TryGetEffectiveLevel(out int effectiveLevel)
+    {
+        if (autoHideTestLevel > 0)
+        {
+            effectiveLevel = Math.Clamp(autoHideTestLevel, 1, 100);
+            return true;
+        }
+
+        if (Configuration.EnableTestMode)
+        {
+            effectiveLevel = Math.Clamp(Configuration.TestEffectiveLevel, 1, 100);
+            return true;
+        }
+
+        effectiveLevel = PlayerState.EffectiveLevel;
+        return PlayerState.IsLevelSynced;
     }
 
     private void QueueRestore()
@@ -255,6 +277,15 @@ public sealed class Plugin : IDalamudPlugin
         restoreMainCrossOnce = true;
         restoreDoubleCrossLOnce = true;
         restoreDoubleCrossROnce = true;
+    }
+
+    public void RestoreFromConfigWindow()
+    {
+        autoHideEnabled = false;
+        autoHideTestLevel = 0;
+        QueueRestore();
+
+        ChatGui.Print("[SyncBarCleaner] Restore queued from settings. Hold/use your main and expanded cross hotbars to refresh them.");
     }
 
     private unsafe void RestoreMainCross(AddonArgs args)
@@ -287,9 +318,7 @@ public sealed class Plugin : IDalamudPlugin
         if (actionSheet == null)
             return;
 
-        var useTestLevel = autoHideTestLevel > 0;
-        var shouldApply = PlayerState.IsLevelSynced || useTestLevel;
-        var effectiveLevel = useTestLevel ? autoHideTestLevel : PlayerState.EffectiveLevel;
+        var shouldApply = TryGetEffectiveLevel(out var effectiveLevel);
 
         // _ActionCross can display different sets depending on controller input mode.
         // Read the visible SET label so we compare each visual slot with the correct
@@ -323,9 +352,7 @@ public sealed class Plugin : IDalamudPlugin
         if (actionSheet == null)
             return;
 
-        var useTestLevel = autoHideTestLevel > 0;
-        var shouldApply = PlayerState.IsLevelSynced || useTestLevel;
-        var effectiveLevel = useTestLevel ? autoHideTestLevel : PlayerState.EffectiveLevel;
+        var shouldApply = TryGetEffectiveLevel(out var effectiveLevel);
 
         for (uint visibleSlotId = 0; visibleSlotId < 8; visibleSlotId++)
         {
