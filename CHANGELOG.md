@@ -1,3 +1,22 @@
+## v1.0.0 - Stable private release
+
+### Added
+- Stable automatic hiding for unavailable level-synced actions on controller cross hotbars.
+- Support for the main cross hotbar and expanded/WXHB cross hotbars.
+- Dynamic visible SET detection for `_ActionCross`, preventing incorrect hiding on alternate sets such as utility bars.
+- Settings window with toggles for automatic enable, main cross hotbar support, expanded cross hotbar support, and fake level testing.
+- Manual restore command and settings-window restore button.
+
+### Fixed
+- Prevented items, macros, mounts, gearsets, Limit Break, and other non-action slots from being hidden.
+- Fixed incorrect visual hiding when `_ActionCross` displayed non-main cross hotbar sets.
+- Fixed Dalamud validation warning by registering a main UI callback.
+- Removed SamplePlugin default settings UI.
+
+### Notes
+- This plugin only changes visibility/alpha on specific UI leaf nodes.
+- It does not edit hotbar data, clear slots, move actions, or save layout changes.
+
 \# Changelog
 
 ## v0.1.2 - Settings and testing controls

@@ -1,13 +1,13 @@
 {
-  "Author": "ZanaRemina",
-  "Name": "SyncBarCleaner",
-  "AssemblyVersion": "0.1.2.0",
-  "Punchline": "Visually hides unavailable synced actions on cross hotbars.",
-  "Description": "Private plugin to make level-synced cross hotbars easier to read.",
-  "ApplicableVersion": "any",
-  "Tags": [
-    "hotbar",
-    "levelsync",
-    "xhb"
-  ]
+    "Author": "ZanaRemina",
+    "Name": "SyncBarCleaner",
+    "AssemblyVersion": "1.0.0.0",
+    "Punchline": "Visually hides unavailable synced actions on cross hotbars.",
+    "Description": "Private plugin to make level-synced cross hotbars easier to read.",
+    "ApplicableVersion": "any",
+    "Tags": [
+        "hotbar",
+        "levelsync",
+        "xhb"
+    ]
 }
