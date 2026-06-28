@@ -99,7 +99,7 @@ public class ConfigWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.Separator();
 
-        if (ImGui.Button("Restore hidden icons now"))
+        if (ImGui.Button("Turn off and restore hidden icons now"))
         {
             plugin.RestoreFromConfigWindow();
         }

@@ -34,9 +34,7 @@ namespace SyncBarCleaner;
 public sealed class Plugin : IDalamudPlugin
 {
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
-    [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
-    [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
@@ -79,7 +77,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public Configuration Configuration { get; init; }
 
-    public readonly WindowSystem WindowSystem = new("SyncBarCleaner");
+    private readonly WindowSystem WindowSystem = new("SyncBarCleaner");
     private ConfigWindow ConfigWindow { get; init; }
 
     public Plugin()
@@ -177,7 +175,7 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    private unsafe void OnCommand(string command, string args)
+    private void OnCommand(string command, string args)
     {
         args = args.Trim();
 
@@ -220,8 +218,7 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        // Auto-enable real level-sync mode when the plugin loads, if enabled in settings.
-        autoHideEnabled = Configuration.AutoEnableOnLoad;
+        autoHideEnabled = true;
         autoHideTestLevel = 0;
 
         if (parts.Length >= 2 && int.TryParse(parts[1], out var fakeLevel))
@@ -285,7 +282,7 @@ public sealed class Plugin : IDalamudPlugin
         autoHideTestLevel = 0;
         QueueRestore();
 
-        ChatGui.Print("[SyncBarCleaner] Restore queued from settings. Hold/use your main and expanded cross hotbars to refresh them.");
+        ChatGui.Print("[SyncBarCleaner] Auto-hide OFF. Restore queued from settings. Hold/use your main and expanded cross hotbars to refresh them.");
     }
 
     private unsafe void RestoreMainCross(AddonArgs args)
